@@ -1,0 +1,183 @@
+<!DOCTYPE HTML PUBLIC>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta charset="utf-8">
+    <title>图片像素颜色分析器</title>
+    <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: 10px;
+            padding: 0;
+        }
+        
+        div {
+            width: 200px;
+            height: 45px;
+            border: 1px solid black;
+            text-align: center;
+        }
+        
+        span {
+            display: inline-block;
+            margin-top: 15px;
+            font-size: 12px;
+            background-color: #F1F1F1;
+        }
+        
+        .src-img {
+            max-width: 300px;
+        }
+
+    </style>
+    <script type="text/javascript">
+        function getObjectURL(file) {
+            var url = null;
+            if (window.createObjectURL != undefined) { // basic
+                url = window.createObjectURL(file);
+            } else if (window.URL != undefined) { // mozilla(firefox)
+                url = window.URL.createObjectURL(file);
+            } else if (window.webkitURL != undefined) { // webkit or chrome
+                url = window.webkitURL.createObjectURL(file);
+            }
+            return url;
+        }
+
+        // 获取16进制颜色
+        function tohex(rgb) {
+            var v = rgb.toString(16).toUpperCase();
+            var zero = "";
+            for (var i = 0; i < 6 - v.length; i++) {
+                zero += "0";
+            }
+            return zero + v;
+        }
+
+        //判断两个颜色是否相近
+        function is_rgb_similar(v1, v2) {
+            var b1 = v1 & 0x0000ff;
+            var g1 = (v1 & 0x00ff00) / 256;
+            var r1 = (v1 & 0xff0000) / 256 / 256;
+
+            var b2 = v2 & 0x0000ff;
+            var g2 = (v2 & 0x00ff00) / 256;
+            var r2 = (v2 & 0xff0000) / 256 / 256;
+
+            if ((r1 - r2) * (r1 - r2) + (g1 - g2) * (g1 - g2) + (b1 - b2) * (b1 - b2) < 36)
+                return true;
+            return false;
+        }
+
+        window.onload = function() {
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+            document.getElementById('img').onchange = function() {
+                $("p").html("");
+
+                var img = event.target.files[0];
+                // 检查图片尺寸
+                if (img.size > 10 * 1024 * 1024) {
+                    alert('图片不能大于10MB!');
+                    return;
+                }
+
+                //设置图片
+                var objUrl = getObjectURL(this.files[0]);
+                if (objUrl) {
+                    $('.src-img').attr("src", objUrl);
+                }
+
+                // file reader
+                var reader = new FileReader();
+                reader.readAsDataURL(img);
+                reader.onload = function(e) {
+                    var image = new Image();
+                    image.src = e.target.result;
+                    image.onload = function() {
+                        // 设置画布
+                        canvas.width = this.width;
+                        canvas.height = this.height;
+                        context.drawImage(this, 0, 0, this.width, this.height);
+                        // 读取图片像素信息
+                        var imageData = context.getImageData(0, 0, this.width, this.height);
+                        var length = imageData.data.length;
+                        var colors = [];
+                        for (var i = 0; i < length; i += 4) {
+                            var rgb = imageData.data[i] * 256 * 256 + imageData.data[i + 1] * 256 + imageData.data[i + 2]
+                            if (rgb in colors) {
+                                colors[rgb] += 1;
+                            } else {
+                                colors[rgb] = 1;
+                            }
+                        }
+
+                        //字典结构转换为数组，并过滤掉少于100个像素的项
+                        var result = [];
+                        var total_pix = 0;
+                        for (var key in colors) {
+                            if (colors[key] > 100) {
+                                result.push({
+                                    "rgb": parseInt(key),
+                                    "count": colors[key]
+                                });
+                            }
+                            total_pix += colors[key];
+                        }
+
+                        //排序，像素越多的前面
+                        result.sort(function(a, b) {
+                            return b['count'] - a['count'];
+                        });
+
+                        //合并颜色相近的颜色，被合并的项目count置为0，注意遍历数组的时候不能进行删除操作
+                        for (var i = 0; i < result.length; i++) {
+                            if (result[i]['count'] === 0) {
+                                continue;
+                            }
+                            for (var j = i + 1; j < result.length; j++) {
+                                if (result[j]['count'] > 0 && is_rgb_similar(result[i]['rgb'], result[j]['rgb'])) {
+                                    result[i]['count'] += result[j]['count'];
+                                    result[j]['count'] = 0;
+                                }
+                            }
+                        }
+
+                        //过滤掉被合并的颜色
+                        var new_result = [];
+                        for (var i = 0; i < result.length; i++) {
+                            if (result[i]['count'] > 0) {
+                                new_result.push({
+                                    "rgb": tohex(result[i]['rgb']),
+                                    "count": result[i]['count']
+                                });
+                            }
+                        }
+
+                        //重新排序，像素越多的前面
+                        new_result.sort(function(a, b) {
+                            return b['count'] - a['count'];
+                        });
+                        
+                        // 创建最多10个颜色块
+                        for (var i = 0; i < new_result.length && i < 10; i++) {
+                            var color_block = '<div style="background-color:#' + new_result[i]["rgb"] + '">';
+                            color_block += '<span>' + new_result[i]['rgb'] + "  " + (new_result[i]['count'] / total_pix * 100.0).toFixed(1) + '%</span></div>';
+                            $("p").append(color_block);
+                        }
+                    }
+                }
+            }
+        }
+
+    </script>
+</head>
+
+<body>
+    <label>请选择图片(小于10MB)</label><br>
+    <input type="file" class="file" id="img" accept=".jpg,.jpeg,.gif,.png,.bmp"><br>
+    <img class="src-img"><br>
+    <p></p>
+</body>
+
+</html>
