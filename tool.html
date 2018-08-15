@@ -1,0 +1,81 @@
+<!DOCTYPE HTML PUBLIC>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta charset="utf-8">
+    <title>Download Tool</title>
+    <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: 10px;
+            padding: 0;
+        }
+        
+        div {
+            width: 200px;
+            height: 45px;
+            border: 1px solid black;
+            text-align: center;
+        }
+
+        textarea {
+            min-width: 220px;
+            min-height: 60px;
+        }
+
+    </style>
+    <script type="text/javascript">
+        var saveFile = function(data, filename){
+            var save_link = document.createElementNS('http://www.w3.org/1999/xhtml', 'a');
+            save_link.href = data;
+            save_link.download = filename;
+
+            var event = document.createEvent('MouseEvents');
+            event.initMouseEvent('click', true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+            save_link.dispatchEvent(event);
+        };
+
+        function do_one_task(url, name) {
+            var xhr = new XMLHttpRequest();
+            xhr.open( "GET", url, true);
+            xhr.responseType = "arraybuffer";
+            xhr.onload = function( e ) {
+                // Obtain a blob: URL for the image data.
+                var arrayBufferView = new Uint8Array( this.response );
+                var blob_data = new Blob( [ arrayBufferView ], { type: "image/jpeg" } );
+
+                // file reader
+                var reader = new FileReader();
+                reader.readAsDataURL(blob_data);
+                reader.onload = function(e) {
+                    var image = new Image();
+                    image.src = e.target.result;
+                    image.onload = function() {
+                        // 设置画布
+                        var canvas = document.createElement('canvas');
+                        var context = canvas.getContext('2d');
+                        canvas.width = this.width;
+                        canvas.height = this.height;
+                        context.drawImage(this, 0, 0, this.width, this.height);
+                        var png_image = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+                        saveFile(png_image, name);
+                    }
+                }
+            };
+            xhr.send();
+        }
+
+        function go() {
+            do_one_task("https://blog.kyle.net.cn/unity-1.png", "unity.png");
+        }
+    </script>
+</head>
+
+<body>
+    <label>Please Enter URL & filename</label><br>
+    <textarea placeholder="eg. https://blog.kyle.net.cn/unity-1.png, unity" readonly="readonly">https://blog.kyle.net.cn/unity-1.png, unity</textarea><br><br>
+    <button onclick="go()">Go</button>
+</body>
+
+</html>
